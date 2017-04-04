@@ -21,14 +21,13 @@ np.random.seed(4)
 EPOCHS = 20
 NUM_CLASS = 10
 BATCH_SIZE = 32
-TRAIN_VAL_FRAC = 0.9
+TRAIN_VAL_FRAC = 0.95
 IH, IW, IC = 28, 28 , 1
+BASE_PATH = "../../../../Datasets/MNIST/"
 
-
-# MOdel Version
-LOAD_VERSION = 1
-SAVE_VERSION = 2
-
+# Model Version
+LOAD_VERSION = 3
+SAVE_VERSION = 4
 
 # Model Definition
 adam = Adam()
@@ -68,18 +67,19 @@ conv3_act = LeakyReLU(alpha = 0.3)(conv3)
 conv3_act_pool = MaxPool2D(pool_size = (2, 2), strides = (2, 2), padding = 'same')(conv3_act)
 
 flatten3 = Flatten()(conv3_act_pool)
-flatten3_drop = Dropout(rate = 0.5)(flatten3)
+flatten3_drop = Dropout(rate = 0.25)(flatten3)
 
 # layer - 4
 dense4 = Dense(units = 1024, kernel_regularizer = 'l2', bias_regularizer = 'l2')(flatten3_drop)
 dense4_act = LeakyReLU(alpha = 0.3)(dense4)
-dense4_act_drop = Dropout(rate = 0.5)(dense4_act)
+dense4_act_drop = Dropout(rate = 0.25)(dense4_act)
 
 # layer - 5
 dense5 = Dense(units = NUM_CLASS, kernel_regularizer = 'l2', bias_regularizer = 'l2')(dense4_act_drop)
 dense5_act = Activation(activation = 'softmax')(dense5)
+model_out = dense5_act
 
-model = Model(inputs = model_in, outputs = dense5_act)
+model = Model(inputs = model_in, outputs = model_out)
 model.compile(optimizer = adam, loss = 'categorical_crossentropy', metrics = ['accuracy'])
 
 print(model.summary())
@@ -93,15 +93,15 @@ if train_or_test == 0:
 
 	if fresh_or_resume == 1:
 		# Load Model Weights
-		model.load_weights(filepath = './Models/v%d.h5' % (LOAD_VERSION))
+		model.load_weights(filepath = os.path.join("Models", "v%d.h5" % (LOAD_VERSION)))
 else:
 	# Load Model Weights
-	model.load_weights(filepath = './Models/v%d.h5' % (LOAD_VERSION))
+	model.load_weights(filepath = os.path.join("Models", "v%d.h5" % (LOAD_VERSION)))
 
 if train_or_test == 0:
 	try:
 		# Read Trainig Data
-		data = pd.read_csv(filepath_or_buffer = "../../../Datasets/Mnist/train.csv").values
+		data = pd.read_csv(filepath_or_buffer = os.path.join(BASE_PATH, "train.csv")).values
 
 		data_x = data[:, 1:] / 255.0
 		data_y = to_categorical(data[:, 0], num_classes = NUM_CLASS)
@@ -121,15 +121,15 @@ if train_or_test == 0:
 		model.fit(train_x, train_y, validation_data = (val_x, val_y), epochs = EPOCHS, batch_size = BATCH_SIZE, shuffle = True)
 
 		# Save Model Weights
-		model.save_weights(filepath = './Models/v%d.h5' % (SAVE_VERSION))
+		model.save_weights(filepath = os.path.join("Models", "v%d.h5" % (SAVE_VERSION)))
 	except:
 		print("Backup Created.")
 
 		# Save Model Weights
-		model.save_weights(filepath = './Models/Backup/%s.h5' % (datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H:%M:%S')))
+		model.save_weights(filepath = os.path.join("Models", "Backup", "%s.h5" % (datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H:%M:%S'))))
 else:
 	# Read Testing Data
-	data = pd.read_csv(filepath_or_buffer = "../../../Datasets/Mnist/test.csv")
+	data = pd.read_csv(filepath_or_buffer = os.path.join(BASE_PATH, "test.csv")).values
 
 	test_x = data.values / 255.0
 
