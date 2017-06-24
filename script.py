@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import datetime
 import numpy as np
@@ -16,68 +17,50 @@ from keras.layers.core import Dense, Flatten, Dropout, Reshape
 
 np.random.seed(4)
 
-
 # Parameters
 EPOCHS = 20
 NUM_CLASS = 10
 BATCH_SIZE = 32
-TRAIN_VAL_FRAC = 0.95
+TRAIN_VAL_FRAC = 0.7
 IH, IW, IC = 28, 28 , 1
 BASE_PATH = "../../../../Datasets/MNIST/"
 
 # Model Version
-LOAD_VERSION = 3
-SAVE_VERSION = 4
+SAVE_NAME = '0' if len(sys.argv) < 2 else sys.argv[1]
+LOAD_NAME = '0' if len(sys.argv) < 3 else sys.argv[2]
 
 # Model Definition
-adam = Adam()
+adam = Adam(lr=1e-3, decay=1e-3)
 
 model_in = Input([IH * IW * IC])
 model_in_reshape = Reshape(target_shape = [IH, IW, IC])(model_in)
 
 # layer - 1
-conv1 = Conv2D(filters = 32, kernel_size = (5, 5), strides = (1, 1), padding = 'same')(model_in_reshape)
+conv1 = Conv2D(filters = 32, kernel_size = (3, 3), strides = (1, 1), padding = 'same')(model_in_reshape)
 conv1_act = LeakyReLU(alpha = 0.3)(conv1)
-
-conv1_1 = Conv2D(filters = 32, kernel_size = (3, 3), strides = (1, 1), padding = 'same')(conv1_act)
-conv1_1_act = LeakyReLU(alpha = 0.3)(conv1_1)
-conv1_1_act_pool = MaxPool2D(pool_size = (2, 2), strides = (2, 2), padding = 'same')(conv1_1_act)
+conv1_act_pool = MaxPool2D(strides=(2, 2))(conv1_act)
 
 # layer - 2
-conv2_1 = Conv2D(filters = 16, kernel_size = (1, 1), strides = (1, 1), padding = 'same', kernel_regularizer = 'l2', 
-	bias_regularizer = 'l2')(conv1_1_act_pool)
-conv2_1_act = LeakyReLU(alpha = 0.3)(conv2_1)
-
-conv2_2 = Conv2D(filters = 16, kernel_size = (3, 3), strides = (1, 1), padding = 'same')(conv2_1)
-conv2_2_act = LeakyReLU(alpha = 0.3)(conv2_2)
-
-conv2_3 = Conv2D(filters = 16, kernel_size = (5, 5), strides = (1, 1), padding = 'same')(conv2_1)
-conv2_3_act = LeakyReLU(alpha = 0.3)(conv2_3)
-
-pool2_4 = MaxPool2D(pool_size = (3, 3), strides = (1, 1), padding = 'same')(conv1_1_act_pool)
-pool2_4_conv = Conv2D(filters = 16, kernel_size = (1, 1), strides = (1, 1), padding = 'same', kernel_regularizer = 'l2', 
-	bias_regularizer = 'l2')(pool2_4)
-pool2_4_conv_act = LeakyReLU(alpha = 0.3)(pool2_4_conv)
-
-inception2 = Concatenate(axis = 3)([conv2_1_act, conv2_2_act, conv2_3_act, pool2_4_conv_act])
+conv2 = Conv2D(filters = 16, kernel_size = (3, 3), strides = (1, 1), padding = 'same')(conv1_act_pool)
+conv2_act = LeakyReLU(alpha = 0.3)(conv2)
+conv2_act_pool = MaxPool2D(strides=(2, 2))(conv2_act)
 
 # layer - 3
-conv3 = Conv2D(filters = 96, kernel_size = (3, 3), strides = (1, 1), padding = 'same')(inception2)
+conv3 = Conv2D(filters = 8, kernel_size = (3, 3), strides = (1, 1), padding = 'same')(conv2_act_pool)
 conv3_act = LeakyReLU(alpha = 0.3)(conv3)
-conv3_act_pool = MaxPool2D(pool_size = (2, 2), strides = (2, 2), padding = 'same')(conv3_act)
-
-flatten3 = Flatten()(conv3_act_pool)
-flatten3_drop = Dropout(rate = 0.25)(flatten3)
 
 # layer - 4
-dense4 = Dense(units = 1024, kernel_regularizer = 'l2', bias_regularizer = 'l2')(flatten3_drop)
-dense4_act = LeakyReLU(alpha = 0.3)(dense4)
-dense4_act_drop = Dropout(rate = 0.25)(dense4_act)
+flatten4 = Flatten()(conv3_act)
 
 # layer - 5
-dense5 = Dense(units = NUM_CLASS, kernel_regularizer = 'l2', bias_regularizer = 'l2')(dense4_act_drop)
-dense5_act = Activation(activation = 'softmax')(dense5)
-model_out = dense5_act
+dense5 = Dense(units = 1024, kernel_regularizer = 'l2', bias_regularizer = 'l2')(flatten4)
+dense5_act = LeakyReLU(alpha = 0.3)(dense5)
+dense5_act_drop = Dropout(rate = 0.5)(dense5_act)
+
+# layer - 6
+dense6 = Dense(units = NUM_CLASS, kernel_regularizer = 'l2', bias_regularizer = 'l2')(dense5_act_drop)
+dense6_act = Activation(activation = 'softmax')(dense6)
+model_out = dense6_act
 
 model = Model(inputs = model_in, outputs = model_out)
 model.compile(optimizer = adam, loss = 'categorical_crossentropy', metrics = ['accuracy'])
@@ -93,17 +76,17 @@ if train_or_test == 0:
 
 	if fresh_or_resume == 1:
 		# Load Model Weights
-		model.load_weights(filepath = os.path.join("Models", "v%d.h5" % (LOAD_VERSION)))
+		model.load_weights(filepath = os.path.join("Models", LOAD_NAME + '.h5'))
 else:
 	# Load Model Weights
-	model.load_weights(filepath = os.path.join("Models", "v%d.h5" % (LOAD_VERSION)))
+	model.load_weights(filepath = os.path.join("Models", LOAD_NAME + '.h5'))
 
 if train_or_test == 0:
 	try:
 		# Read Trainig Data
 		data = pd.read_csv(filepath_or_buffer = os.path.join(BASE_PATH, "train.csv")).values
 
-		data_x = data[:, 1:] / 255.0
+		data_x = 1.0 - (data[:, 1:] / 255.0)
 		data_y = to_categorical(data[:, 0], num_classes = NUM_CLASS)
 
 		idx = np.random.choice(np.arange(data_x.shape[0]), data_x.shape[0], replace = False)
@@ -121,7 +104,7 @@ if train_or_test == 0:
 		model.fit(train_x, train_y, validation_data = (val_x, val_y), epochs = EPOCHS, batch_size = BATCH_SIZE, shuffle = True)
 
 		# Save Model Weights
-		model.save_weights(filepath = os.path.join("Models", "v%d.h5" % (SAVE_VERSION)))
+		model.save_weights(filepath = os.path.join("Models", SAVE_NAME + '.h5'))
 	except:
 		print("Backup Created.")
 
@@ -129,7 +112,7 @@ if train_or_test == 0:
 		model.save_weights(filepath = os.path.join("Models", "Backup", "%s.h5" % (datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H:%M:%S'))))
 else:
 	# Read Testing Data
-	data = pd.read_csv(filepath_or_buffer = os.path.join(BASE_PATH, "test.csv")).values
+	data = pd.read_csv(filepath_or_buffer = os.path.join(BASE_PATH, "test.csv"))
 
 	test_x = data.values / 255.0
 
